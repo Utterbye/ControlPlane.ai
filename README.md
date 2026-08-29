@@ -1,4 +1,4 @@
-ControlPlane Checker
+*ControlPlane Checker*
 
 A multi-layer AI safety, reliability, and governance system for enterprise chatbots.
 
