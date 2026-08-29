@@ -1,3 +1,5 @@
+
+Deployed- https://controlplaneai-z79ax6heyhlsihhanz2xns.streamlit.app/
 # ControlPlane Checker
 
 ControlPlane Checker is a multi-layer AI safety, reliability, and governance system for enterprise chatbot applications. Instead of sending every user query directly to an LLM, the system evaluates the request, prepares and retrieves supporting evidence, verifies the generated response, makes a final decision, and analyses historical behaviour for continuous improvement.
