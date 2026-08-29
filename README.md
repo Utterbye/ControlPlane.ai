@@ -1,174 +1,106 @@
 ControlPlane Checker
-Overview
 
-ControlPlane Checker is a multi-layer AI safety, reliability, and governance system designed for enterprise chatbot applications. The main objective is to prevent unsafe or unreliable responses from reaching users while also making the complete AI pipeline auditable, explainable, and continuously improvable.
+A multi-layer AI safety, reliability, and governance system for enterprise chatbots.
 
-Instead of directly sending every user query to an LLM, the system processes the request through three different tiers. Each tier has a specific responsibility: Tier 1 provides fast risk detection, Tier 2 performs deeper verification, and Tier 3 analyses historical behaviour and proposes improvements.
+ControlPlane Checker acts as a control layer around an LLM. Instead of directly sending every user query to the model, it evaluates the request, retrieves supporting evidence, verifies the generated answer, makes a final decision, and continuously analyses historical behaviour.
 
-System Architecture
-                    USER QUERY
-                        │
-                        ▼
-                ┌─────────────────┐
-                │     TIER 1      │
-                │ Fast Risk Check │
-                └────────┬────────┘
-                         │
-              ┌──────────┴──────────┐
-              │                     │
-           High Risk             Normal
-              │                     │
-              ▼                     ▼
-          Block/Care        Query Processing
-                                    │
-                                    ▼
-                         Rewrite → Attempt → Cache
-                                    │
-                                    ▼
-                           Evidence Retrieval
-                                    │
-                                    ▼
-                              Re-ranking
-                                    │
-                                    ▼
-                              LLM Answer
-                                    │
-                                    ▼
-                         Tier 1 Output Check
-                                    │
-                                    ▼
-                ┌──────────────────────────┐
-                │         TIER 2           │
-                │   Deep Verification     │
-                └────────────┬─────────────┘
-                             │
-                             ▼
-                      Decision Engine
-                             │
-                   ┌─────────┼─────────┐
-                   ▼         ▼         ▼
-                 Allow     Retry     Abstain
-                             │
-                             ▼
-                        Final Answer
-                             │
-                             ▼
-                      Trace + Feedback
-                             │
-                             ▼
-                ┌─────────────────────────┐
-                │         TIER 3          │
-                │ Background Analysis    │
-                └─────────────────────────┘
-                             │
-                             ▼
-                     Improvement Proposals
-                             │
-                             ▼
-                       Human Approval
-Tier 1 — Fast Risk Detection
+🚀 Overview
 
-Tier 1 is the first line of defence. Its purpose is to analyse a request quickly before expensive processing takes place.
+The system is divided into three tiers, with each tier serving a different purpose:
 
-It contains five major detectors:
+Tier 1 — Fast Risk Detection: Quickly identifies potentially unsafe or sensitive requests.
+Tier 2 — Deep Verification: Performs detailed checks on generated answers.
+Tier 3 — Background Learning: Analyses historical traces and proposes system improvements.
+
+The overall objective is to provide safe, reliable, explainable, and auditable AI responses.
+
+🛡️ Tier 1 — Fast Risk Detection
+
+Tier 1 is the first line of defence.
+
+It performs five major checks:
 
 Injection / Jailbreak Detection
 Unsafe Intent Detection
 PII Detection
-High-Stakes Detection
-Usage / Cost Detection
+High-Stakes Topic Detection
+Usage / Cost Abuse Detection
 
-Each detector produces a score. These scores are combined into an overall risk score, risk band, and recommended action.
+Each detector produces a risk score. These scores are combined into an overall risk score, risk band, action, and strict-mode decision.
 
-For unsafe-intent detection, the system does not simply search for dangerous words. It compares the query against both unsafe and safe examples, which helps prevent legitimate questions containing words such as attack, violence, or security from being incorrectly classified.
+The unsafe-intent detector compares a query against both unsafe and safe examples, reducing false positives when legitimate queries contain dangerous-looking vocabulary.
 
-The high-stakes detector handles questions where an incorrect answer could have real consequences, such as financial, HR, legal, medical, security, or customer-commitment questions. Instead of automatically blocking these questions, the system raises the verification standard.
+High-stakes queries, such as financial, HR, legal, medical, security, and customer-commitment questions, can activate stricter verification rather than simply being blocked.
 
-Query Processing
+🔎 Query Processing
 
-After the initial safety check, the query goes through several preparation stages.
+Before retrieval and generation, the system prepares the query through three stages:
 
 1. Query Rewriting
 
-The system converts incomplete or ambiguous questions into clearer standalone queries. It can expand short forms and resolve relative dates.
+Converts incomplete questions, short forms, and relative dates into clearer queries.
 
-For example:
+Example:
 
 "What is the WFH policy?"
             ↓
 "What is the work from home policy?"
-
-This happens before cache lookup and retrieval because both depend on having a meaningful query.
-
 2. Attempt Detection
 
-The system checks whether the user is repeating or pushing back on a previous question.
+Detects whether the user is repeating or correcting a previous request.
 
-For example:
+Examples:
 
 "That's not what I asked."
 "Try again."
 "Again."
 
-This prevents the system from simply returning a cached answer that the user has already rejected.
+This prevents the system from returning a cached answer that the user has already rejected.
 
 3. Cache Lookup
 
-The system checks whether a sufficiently similar verified answer already exists. A strict similarity threshold is used because returning the wrong cached answer can be costly.
+Checks whether a sufficiently similar verified answer already exists, reducing unnecessary model calls.
 
-Evidence Retrieval and Generation
+📚 Evidence Retrieval
 
 If there is no suitable cached answer, the system retrieves relevant documents and ranks the available evidence.
 
-The purpose is to make the LLM answer using company-approved evidence rather than relying entirely on its internal knowledge.
+The purpose is to ensure that the LLM generates its response using relevant supporting information rather than relying only on its internal knowledge.
 
-The retrieved evidence is then passed to the model for answer generation.
+The selected evidence is then passed to the model for answer generation.
 
-After generation, the answer is checked again before it reaches the user.
+🔬 Tier 2 — Deep Verification
 
-Tier 2 — Deep Verification
+Tier 2 is the deeper verification layer.
 
-Tier 2 is the second line of defence. It performs more expensive checks when additional verification is necessary.
-
-The main checks are:
+It checks the generated response using:
 
 Groundedness
 
-Groundedness asks:
-
-Is the answer actually supported by the retrieved evidence?
-
-If claims are unsupported, the system can retry the generation rather than immediately returning a potentially hallucinated answer.
+Checks whether the claims made in the answer are actually supported by the retrieved evidence.
 
 Self-Consistency
 
-The system can generate the answer twice using the same evidence and compare the important facts.
+The system can generate the answer twice using the same evidence and compare important facts such as numbers, dates, durations, and entities.
 
-For example:
+If two generations disagree on an important fact, the answer may be unreliable.
 
-Answer 1: "The notice period is 30 days."
-Answer 2: "The notice period is 60 days."
+Output Safety & Fair Wording
 
-The difference indicates that the model may not be reliable about that fact. The check focuses on facts such as numbers and durations rather than requiring identical wording.
+Checks the generated answer, rather than the original question.
 
-Output Safety and Fair Wording
+It looks for:
 
-Tier 1 examines the question, whereas this check examines the generated answer.
+Unsafe advice
+Unfair generalisations
+Overconfident claims
+Problematic wording
 
-It looks for things such as:
+⚖️ Decision Engine
 
-unsafe advice
-unfair generalisations
-excessive certainty
-problematic wording
+The Decision Engine combines the results from the different checks and decides what should happen to the response.
 
-This is important because a harmless-looking question can still result in an unsafe or unfair answer.
-
-Decision Engine
-
-After Tier 1 and Tier 2 results are available, the Decision Engine determines what should happen.
-
-Possible actions include:
+Possible outcomes include:
 
 ALLOW
 AUTO-FIX
@@ -177,117 +109,158 @@ ABSTAIN
 ESCALATE
 BLOCK
 
-For example, if the answer contains unsupported claims, the system can retry once. If the claims are still unsupported after the retry, the system can abstain instead of repeatedly generating unreliable answers.
+For example, if the generated answer contains unsupported claims, the system can retry the generation. If the claims remain unsupported after the retry, the system can abstain instead of returning an unreliable answer.
 
-The decision engine also produces a trust label and records the reason behind the decision, making the result easier to audit.
+The decision also includes a trust label and explanation, making the result easier to audit.
 
-Trace Store
+📝 Trace Store
 
-Every completed request is recorded in a trace store.
-
-A trace can contain:
+After a request is processed, the system stores a trace containing information such as:
 
 User question
 Generated answer
 Tier 1 scores
 Tier 2 scores
-Detector information
 Decision
-Timings
+Timing information
 Token usage
-Thread/user information
 Trust label
 User feedback
 
-The important design principle is that the trace is written after the response, so background analysis does not interfere with live requests.
+The trace store allows the background system to analyse historical behaviour without interfering with live requests.
 
-The prototype uses a local JSONL trace store, while the structure is designed so it can map to a production tracing system such as LangSmith.
+🧠 Tier 3 — Background Learning
 
-Tier 3 — Background Learning and Monitoring
+Tier 3 does not run directly on a live request.
 
-Tier 3 does not run directly on a user's request. It works on historical traces and looks for patterns that cannot be detected from a single query.
+Instead, it analyses historical traces to identify patterns that cannot be detected from a single request.
 
 It analyses:
 
-Bias patterns — whether similar users receive different treatment
-Cost patterns — where token usage and resources are being consumed
-Feedback clusters — which topics repeatedly receive negative feedback
-Repeated queries — questions that users repeatedly ask
-Conflict rate — topics where sources disagree
+Analysis	Purpose
+Bias Patterns	Detect whether similar users are treated differently
+Cost Patterns	Identify inefficient token/resource usage
+Feedback Clusters	Identify topics receiving repeated negative feedback
+Repeated Queries	Find questions being asked repeatedly
+Conflict Rate	Detect disagreement between sources
 
-These jobs are specifically designed to analyse many requests together rather than one request at a time.
+For example, the bias analysis creates counterfactual versions of real questions by changing attributes such as names while keeping the rest of the question unchanged. A different risk result can indicate a possible bias signal.
 
-For example, the bias job can create counterfactual versions of a question by changing an attribute such as a name while keeping everything else the same. If the risk score changes significantly, it becomes a possible bias signal.
+👨‍💻 Human-Controlled Improvement
 
-Human-Controlled Improvement
+One of the most important principles of the system is:
 
-One of the most important design principles is:
+Tier 3 proposes changes — it never applies them automatically.
 
-Tier 3 proposes changes; it never applies them automatically.
+Tier 3 can propose changes to:
 
-The system may suggest changes to:
+Detector thresholds
+Retrieval behaviour
+Source trust lists
+Caching
+Usage limits
 
-detector thresholds
-source-trust lists
-retrieval behaviour
-caching
-usage limits
+However, proposed changes require human review, shadow-mode testing, and validation before affecting users.
 
-But proposed changes must go through human review, shadow mode, and validation before they affect users.
+This creates a controlled learning loop:
 
-This creates a controlled improvement loop:
+Traces → Analysis → Finding → Proposal → Human Review → Shadow Testing → Validation → Approved Change
 
-User Requests
-      ↓
-Traces
-      ↓
-Tier 3 Analysis
-      ↓
-Findings
-      ↓
-Improvement Proposal
-      ↓
-Human Review
-      ↓
-Shadow Testing
-      ↓
-Validation
-      ↓
-Approved Change
-Streamlit Application
+🖥️ Streamlit Application
 
-The project is presented through a Streamlit-based web application called ControlPlane Checker. The application can be started using:
+The project includes a Streamlit-based web interface called ControlPlane Checker.
+
+Run the application with:
 
 streamlit run app.py
 
-The Streamlit interface provides four main tabs:
+The application provides four main tabs:
 
-1. Ask
+💬 Ask
 
-This is the main interface where a user enters a question and runs it through the complete pipeline. The application sends the question, user ID, thread ID, and run ID into the graph.
+Allows the user to enter a question and run it through the complete pipeline.
 
-2. Human Review
+👤 Human Review
 
-This interface allows reviewers to examine flagged cases and provide verified feedback. This feedback becomes useful for improving the system.
+Allows reviewers to examine flagged cases and provide verified feedback.
 
-3. Tier 3
+🧠 Tier 3
 
-This displays the background analysis performed by Tier 3 and shows the improvement proposals generated from the findings.
+Displays the background analysis and improvement proposals generated by Tier 3.
 
-4. Traces
+📊 Traces
 
-This displays the stored request records that are later used by Tier 3 for analysis.
+Displays the stored request records used by the background analysis.
 
-The application therefore acts as the visual front-end of the complete control-plane pipeline, allowing the user to see how a query moves through safety checks, retrieval, generation, verification, decision-making, tracing, and background improvement.
+When the user clicks Run the pipeline, Streamlit sends the question, user ID, thread ID, and run ID into the backend graph.
 
-Key Design Principles
+⭐ Key Features
+🛡️ Multi-layer AI safety
+🔐 Jailbreak & prompt-injection detection
+🚨 Unsafe-intent detection
+🔏 PII protection
+⚠️ High-stakes query detection
+📚 Evidence-based generation
+🔬 Groundedness verification
+🔄 Self-consistency checking
+⚖️ Fairness & output-safety checks
+⚙️ Centralized decision engine
+📝 Complete request tracing
+👨‍💻 Human review workflow
+🧠 Background bias and reliability analysis
+🔁 Human-controlled improvement loop
+🖥️ Interactive Streamlit interface
+🎯 Core Design Philosophy
 
-The project is built around five major principles:
+The project is built around five principles:
 
-Safety first — risky requests and unsafe outputs are detected before reaching the user.
-Evidence-based answers — generated answers are checked against retrieved evidence.
-Fail safely — unsupported or unreliable answers can be retried or rejected.
-Full auditability — requests, decisions, scores, and feedback are recorded.
-Human-controlled improvement — Tier 3 can recommend changes, but humans remain responsible for approving them.
+1. Safety First
+Potentially unsafe requests and outputs are detected before reaching the user.
 
-Overall, ControlPlane Checker acts as a control layer around an enterprise LLM, combining real-time safety checks, evidence verification, decision-making, tracing, human review, and background learning into one architecture.
+2. Evidence-Based Answers
+Generated responses are checked against supporting evidence.
+
+3. Fail Safely
+When the system cannot verify an answer, it can retry, abstain, or escalate instead of confidently returning unreliable information.
+
+4. Full Auditability
+Requests, scores, decisions, timings, and feedback are recorded.
+
+5. Human-Controlled Learning
+The system can identify improvements, but humans remain responsible for approving changes.
+
+🏗️ Project Structure
+ControlPlane Checker/
+│
+├── app.py                  # Streamlit application
+├── graph.py                # Main pipeline orchestration
+│
+├── tier1.py                # Tier 1 orchestration
+├── tier1_unsafe.py         # Unsafe-intent detection
+├── tier1_*                 # Other Tier 1 detectors
+│
+├── tier2.py                # Tier 2 orchestration
+├── tier2_checks.py         # Consistency & output-safety checks
+├── tier2_groundedness.py   # Evidence verification
+│
+├── tier3.py                # Tier 3 orchestrator
+├── tier3_jobs.py           # Background analysis jobs
+├── tier3_trace.py          # Trace storage & processing
+│
+├── attempts.py             # Rewrite, attempt & cache logic
+├── documents.py            # Document/evidence handling
+├── review.py               # Human review workflow
+├── examples_unsafe.py      # Safety examples
+│
+├── traces.jsonl            # Request traces
+└── docs/
+    └── architecture.png    # System architecture
+🔄 Complete System
+
+ControlPlane Checker is not simply a chatbot. It is a control and governance layer around an LLM that combines real-time safety detection, retrieval, answer verification, decision-making, tracing, human review, and background learning.
+
+The key idea is:
+
+Detect → Retrieve → Generate → Verify → Decide → Trace → Learn → Improve
+
+This architecture allows the system to become safer and more reliable over time without allowing automated changes to silently affect users., human review, and background learning into one architecture.
