@@ -1,0 +1,7 @@
+streamlit
+langgraph
+numpy
+scikit-learn
+sentence-transformers
+presidio-analyzer
+spacy
